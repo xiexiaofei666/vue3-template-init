@@ -1,26 +1,26 @@
-<!--
- * @Description: Stay hungry，Stay foolish
- * @Author: xieXiaoFei
- * @Date: 2023-05-17 14:32:02
- * @LastEditors: xieXiaoFei
- * @LastEditTime: 2023-05-21 14:01:31
--->
-<script setup lang="ts">
-import { ElConfigProvider } from 'element-plus'
-import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
-import { ref } from 'vue'
-
-const locale = ref(zhCn)
-</script>
-
 <template>
-  <el-config-provider :locale="locale">
-    <router-view></router-view>
+  <el-config-provider :locale="currentLocale">
+    <router-view />
+    <ReDialog />
   </el-config-provider>
 </template>
 
-<style scoped lang="scss">
-h1 {
-  color: $color;
-}
-</style>
+<script lang="ts">
+import { defineComponent } from "vue";
+import { ElConfigProvider } from "element-plus";
+import { ReDialog } from "@/components/ReDialog";
+import zhCn from "element-plus/es/locale/lang/zh-cn";
+
+export default defineComponent({
+  name: "app",
+  components: {
+    [ElConfigProvider.name]: ElConfigProvider,
+    ReDialog
+  },
+  computed: {
+    currentLocale() {
+      return zhCn;
+    }
+  }
+});
+</script>

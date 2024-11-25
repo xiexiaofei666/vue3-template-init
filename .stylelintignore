@@ -1,4 +1,4 @@
-/node_modules/*
 /dist/*
-/html/*
 /public/*
+public/*
+src/style/reset.scss

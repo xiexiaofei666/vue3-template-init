@@ -1,64 +1,62 @@
-/*
- * @Description: Stay hungry，Stay foolish
- * @Author: xieXiaoFei
- * @Date: 2023-05-17 14:32:02
- * @LastEditors: xieXiaoFei
- * @LastEditTime: 2023-06-02 17:37:30
- */
-import { ConfigEnv, UserConfigExport, loadEnv } from 'vite'
-import vue from '@vitejs/plugin-vue'
-import AutoImport from 'unplugin-auto-import/vite'
-import Components from 'unplugin-vue-components/vite'
-import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
-import { viteMockServe } from 'vite-plugin-mock'
-import DefineOptions from 'unplugin-vue-define-options/vite'
-import VueSetupExtend from 'vite-plugin-vue-setup-extend'
-import path from 'path'
-// 引入svg
-import { createSvgIconsPlugin } from 'vite-plugin-svg-icons'
-// https://vitejs.dev/config/
-export default ({ command, mode }: ConfigEnv): UserConfigExport => {
-  // 获取各种环境下对应的变量
-  let env = loadEnv(mode, process.cwd())
+import { getPluginsList } from "./build/plugins";
+import { include, exclude } from "./build/optimize";
+import { type UserConfigExport, type ConfigEnv, loadEnv } from "vite";
+import {
+  root,
+  alias,
+  wrapperEnv,
+  pathResolve,
+  __APP_INFO__
+} from "./build/utils";
+
+export default ({ mode }: ConfigEnv): UserConfigExport => {
+  const { VITE_CDN, VITE_PORT, VITE_COMPRESSION, VITE_PUBLIC_PATH } =
+    wrapperEnv(loadEnv(mode, root));
   return {
-    base: './',
-    plugins: [
-      VueSetupExtend(),
-      DefineOptions(),
-      vue(),
-      AutoImport({
-        resolvers: [ElementPlusResolver()],
-      }),
-      Components({
-        resolvers: [ElementPlusResolver()],
-      }),
-      createSvgIconsPlugin({
-        iconDirs: [path.resolve(process.cwd(), 'src/assets/icons')],
-        symbolId: 'icon-[dir]-[name]',
-      }),
-      viteMockServe({
-        localEnabled: command === 'serve',
-      }),
-    ],
-    resolve: { alias: { '@': path.resolve('./src') } },
-    css: {
-      preprocessorOptions: {
-        scss: {
-          javascriptEnabled: true,
-          additionalData: '@import "./src/styles/variable.scss";',
-        },
-      },
+    base: VITE_PUBLIC_PATH,
+    root,
+    resolve: {
+      alias
     },
-    // 代理跨域
+    // 服务端渲染
     server: {
-      proxy: {
-        [env.VITE_APP_BASE_API]: {
-          target: env.VITE_SERVE,
-          // 需要代理跨域
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api/, ''),
-        },
-      },
+      // 端口号
+      port: VITE_PORT,
+      host: "0.0.0.0",
+      // 本地跨域代理 https://cn.vitejs.dev/config/server-options.html#server-proxy
+      proxy: {},
+      // 预热文件以提前转换和缓存结果，降低启动期间的初始页面加载时长并防止转换瀑布
+      warmup: {
+        clientFiles: ["./index.html", "./src/{views,components}/*"]
+      }
     },
-  }
-}
+    plugins: getPluginsList(VITE_CDN, VITE_COMPRESSION),
+    // https://cn.vitejs.dev/config/dep-optimization-options.html#dep-optimization-options
+    optimizeDeps: {
+      include,
+      exclude
+    },
+    build: {
+      // https://cn.vitejs.dev/guide/build.html#browser-compatibility
+      target: "es2015",
+      sourcemap: false,
+      // 消除打包大小超过500kb警告
+      chunkSizeWarningLimit: 4000,
+      rollupOptions: {
+        input: {
+          index: pathResolve("./index.html", import.meta.url)
+        },
+        // 静态资源分类打包
+        output: {
+          chunkFileNames: "static/js/[name]-[hash].js",
+          entryFileNames: "static/js/[name]-[hash].js",
+          assetFileNames: "static/[ext]/[name]-[hash].[ext]"
+        }
+      }
+    },
+    define: {
+      __INTLIFY_PROD_DEVTOOLS__: false,
+      __APP_INFO__: JSON.stringify(__APP_INFO__)
+    }
+  };
+};

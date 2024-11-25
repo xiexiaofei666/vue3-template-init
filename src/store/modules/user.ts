@@ -1,95 +1,110 @@
-/*
- * @Description: Stay hungry，Stay foolish
- * @Author: xieXiaoFei
- * @Date: 2023-05-20 10:58:16
- * @LastEditors: xieXiaoFei
- * @LastEditTime: 2023-06-02 11:27:32
- */
-import { defineStore } from 'pinia'
-import router from '@/router'
-import { reqLogin, reqUserInfo, reqLogOut } from '@/api/user'
-import type {
-  LoginFormData,
-  LoginResponseData,
-  userInfoResponseData,
-} from '@/api/user/type'
-import type { UserState } from './types/types'
-import { SET_TOKEN, GET_TOKEN, REMOVE_TOKEN } from '@/utils/token'
-import { constantRoute, asyncRoute, anyRoute } from '@/router/routes'
+import { defineStore } from "pinia";
+import {
+  type userType,
+  store,
+  router,
+  resetRouter,
+  routerArrays,
+  storageLocal
+} from "../utils";
+import {
+  type UserResult,
+  type RefreshTokenResult,
+  getLogin,
+  refreshTokenApi
+} from "@/api/user";
+import { useMultiTagsStoreHook } from "./multiTags";
+import { type DataInfo, setToken, removeToken, userKey } from "@/utils/auth";
 
-// @ts-ignore
-import cloneDeep from 'lodash/cloneDeep'
-
-function filterAsyncRoute(asyncRoute: any, routes: any) {
-  return asyncRoute.filter((item: any) => {
-    if (routes.includes(item.name)) {
-      if (item.children && item.children.length > 0) {
-        item.children = filterAsyncRoute(item.children, routes)
-      }
-      return true
-    }
-  })
-}
-
-let useUserStore = defineStore('User', {
-  // 小仓库存储数据的地方
-  state: (): UserState => {
-    return {
-      token: GET_TOKEN()!,
-      menuRoutes: constantRoute,
-      username: '',
-      avatar: '',
-      buttons: [],
-    }
-  },
-  // 异步|逻辑的地方
+export const useUserStore = defineStore({
+  id: "pure-user",
+  state: (): userType => ({
+    // 头像
+    avatar: storageLocal().getItem<DataInfo<number>>(userKey)?.avatar ?? "",
+    // 用户名
+    username: storageLocal().getItem<DataInfo<number>>(userKey)?.username ?? "",
+    // 昵称
+    nickname: storageLocal().getItem<DataInfo<number>>(userKey)?.nickname ?? "",
+    // 页面级别权限
+    roles: storageLocal().getItem<DataInfo<number>>(userKey)?.roles ?? [],
+    // 按钮级别权限
+    permissions:
+      storageLocal().getItem<DataInfo<number>>(userKey)?.permissions ?? [],
+    // 是否勾选了登录页的免登录
+    isRemembered: false,
+    // 登录页的免登录存储几天，默认7天
+    loginDay: 7
+  }),
   actions: {
-    //用户登录方法
-    async userLogin(data: LoginFormData) {
-      let res: LoginResponseData = await reqLogin(data)
-      // success=>token
-      // error=>error.message
-      if (res.code === 200) {
-        this.token = res.data as string
-        // 持久化
-        SET_TOKEN(res.data as string)
-        return 'ok'
-      } else {
-        return Promise.reject(new Error(res.data as string))
-      }
+    /** 存储头像 */
+    SET_AVATAR(avatar: string) {
+      this.avatar = avatar;
     },
-    async userInfo() {
-      let res: userInfoResponseData = await reqUserInfo()
+    /** 存储用户名 */
+    SET_USERNAME(username: string) {
+      this.username = username;
+    },
+    /** 存储昵称 */
+    SET_NICKNAME(nickname: string) {
+      this.nickname = nickname;
+    },
+    /** 存储角色 */
+    SET_ROLES(roles: Array<string>) {
+      this.roles = roles;
+    },
+    /** 存储按钮级别权限 */
+    SET_PERMS(permissions: Array<string>) {
+      this.permissions = permissions;
+    },
+    /** 存储是否勾选了登录页的免登录 */
+    SET_ISREMEMBERED(bool: boolean) {
+      this.isRemembered = bool;
+    },
+    /** 设置登录页的免登录存储几天 */
+    SET_LOGINDAY(value: number) {
+      this.loginDay = Number(value);
+    },
+    /** 登入 */
+    async loginByUsername(data) {
+      return new Promise<UserResult>((resolve, reject) => {
+        getLogin(data)
+          .then(data => {
+            if (data?.success) setToken(data.data);
+            resolve(data);
+          })
+          .catch(error => {
+            reject(error);
+          });
+      });
+    },
+    /** 前端登出（不调用接口） */
+    logOut() {
+      this.username = "";
+      this.roles = [];
+      this.permissions = [];
+      removeToken();
+      useMultiTagsStoreHook().handleTags("equal", [...routerArrays]);
+      resetRouter();
+      router.push("/login");
+    },
+    /** 刷新`token` */
+    async handRefreshToken(data) {
+      return new Promise<RefreshTokenResult>((resolve, reject) => {
+        refreshTokenApi(data)
+          .then(data => {
+            if (data) {
+              setToken(data.data);
+              resolve(data);
+            }
+          })
+          .catch(error => {
+            reject(error);
+          });
+      });
+    }
+  }
+});
 
-      if (res.code === 200) {
-        this.username = res.data.name as string
-        this.avatar = res.data.avatar as string
-        let userAsyncRoute = filterAsyncRoute(
-          cloneDeep(asyncRoute),
-          res.data.routes,
-        )
-        this.menuRoutes = [...constantRoute, ...userAsyncRoute, anyRoute]
-        ;[...userAsyncRoute, anyRoute].forEach((route: any) => {
-          router.addRoute(route)
-        })
-        return 'ok'
-      } else {
-        return Promise.reject(new Error(res.message))
-      }
-    },
-    async userLogout() {
-      let res = await reqLogOut()
-      if (res.code === 200) {
-        this.token = ''
-        this.username = ''
-        this.avatar = ''
-        REMOVE_TOKEN()
-      } else {
-        return Promise.reject(new Error(res.message))
-      }
-    },
-  },
-  getters: {},
-})
-
-export default useUserStore
+export function useUserStoreHook() {
+  return useUserStore(store);
+}
